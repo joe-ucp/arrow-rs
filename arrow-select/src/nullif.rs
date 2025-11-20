@@ -40,9 +40,6 @@
  * Then:
  *   result_valid(i) = V(i) & !C(i)
  *   result_value(i) = left_value(i)    // when result_valid(i) == true
- *
- * This contract is the law. All nullif implementations must follow it.
- * See docs/arraydata_bitmap_layout_contract.md for full details.
  */
 
 use arrow_array::{Array, ArrayRef, BooleanArray, make_array};
@@ -143,14 +140,20 @@ fn compute_null_buffer(validity: &Buffer, len: usize) -> (BooleanBuffer, usize) 
     (null_buffer, null_count)
 }
 
-/// Computes the NULLIF validity bitmap from left validity and condition mask.
+/// Computes the NULLIF validity bitmap from the left array's validity and
+/// a boolean condition mask.
 ///
-/// For each logical index `i` in `0..len`:
-/// - `left_bit = bit(left_valid, left_offset + i)`
-/// - `cond_bit = bit(cond_mask, cond_offset + i)`
-/// - `result_bit = left_bit & !cond_bit`
-///
-/// This implements the core bitmap logic for NULLIF, isolating it from array-level concerns.
+/// Invariants used here:
+/// - For any `ArrayData` with `len = L` and `offset = O`, logical index `i`
+///   (0 <= i < L) is valid iff `get_bit(validity, O + i)` is true.
+/// - Let `V(i)` be the left array's validity at logical index `i`.
+/// - Let `C(i)` be the boolean condition at logical index `i`, where `true`
+///   means "nullify this position".
+/// - NULLIF result validity is defined as:
+///       result_valid(i) = V(i) & !C(i)
+///   for `i` in `0..len`.
+/// - The result array is built with `offset = 0`, so bit `i` in the result
+///   validity bitmap corresponds directly to logical index `i`.
 fn compute_nullif_validity(
     left_valid: &Buffer,
     left_offset: usize,
